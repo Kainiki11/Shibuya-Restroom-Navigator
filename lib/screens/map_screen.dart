@@ -1,68 +1,52 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_shibuya/env/env.dart';
+import 'package:flutter_application_shibuya/screens/toilet_detail_screen.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
+
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
 
   @override
+  // ignore: library_private_types_in_public_api
   _MapScreenState createState() => _MapScreenState();
 }
 
 class _MapScreenState extends State<MapScreen> {
-    late GoogleMapController mapController;
+  late GoogleMapController mapController;
+  // ignore: prefer_final_fields
   double _originLatitude = 6.5212402, _originLongitude = 3.3679965;
+  // ignore: prefer_final_fields
   double _destLatitude = 6.849660, _destLongitude = 3.648190;
-  // double _originLatitude = 26.48424, _originLongitude = 50.04551;
-  // double _destLatitude = 26.46423, _destLongitude = 50.06358;
   Map<MarkerId, Marker> markers = {};
   Map<PolylineId, Polyline> polylines = {};
   List<LatLng> polylineCoordinates = [];
   PolylinePoints polylinePoints = PolylinePoints();
   String googleAPiKey = Env.key;
-  LatLng _currentPosition = const LatLng(35.6595, 139.7006);
+  var _currentPosition = const LatLng(35.6595, 139.7006);
   final ToiletService _toiletService = ToiletService();
-  double _currentZoom = 15.0; // 初期ズームレベル
   List<Toilet> _toilets = [];
   Set<Marker> _markers = {};
-  String _searchQuery = '';
   Set<Polyline> _polylines = {};
+  String _searchQuery = '';
+  // double _currentZoom = 15.0; // 初期ズームレベル
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
     _loadToiletMarkers();
-    /// origin marker
-    _addMarker(LatLng(_originLatitude, _originLongitude), "origin",
-        BitmapDescriptor.defaultMarker);
-
-    /// destination marker
-    _addMarker(LatLng(_destLatitude, _destLongitude), "destination",
-        BitmapDescriptor.defaultMarkerWithHue(90));
+    _addMarker(LatLng(_originLatitude, _originLongitude), "origin", BitmapDescriptor.defaultMarker);
+    _addMarker(LatLng(_destLatitude, _destLongitude), "destination", BitmapDescriptor.defaultMarkerWithHue(90));
     _getPolyline();
   }
 
-  // ズームレベルを更新するメソッド
-  void _updateZoomLevel(bool zoomIn) {
-    final newZoom = zoomIn ? _currentZoom + 1 : _currentZoom - 1;
-
-    // ズームレベルが許容範囲内か確認
-    if (newZoom < 2 || newZoom > 20) return;
-
-    setState(() {
-      _currentZoom = newZoom;
-    });
-
-    // ズームレベルを反映
-    mapController.animateCamera(CameraUpdate.zoomTo(_currentZoom));
-  }
-  
   void _getCurrentLocation() async {
+    // 現在地の取得
     Position position = await Geolocator.getCurrentPosition(
       // ignore: deprecated_member_use
       desiredAccuracy: LocationAccuracy.high,
@@ -70,13 +54,51 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {
       _currentPosition = LatLng(position.latitude, position.longitude);
     });
+
+    // 現在地が取得できた後にトイレの情報を更新
+    _loadToiletMarkers();
   }
+  // void _updateZoomLevel(bool zoomIn) {
+  //   final newZoom = zoomIn ? _currentZoom + 1 : _currentZoom - 1;
+
+  //   // ズームレベルが許容範囲内か確認
+  //   if (newZoom < 2 || newZoom > 20) return;
+
+  //   setState(() {
+  //     _currentZoom = newZoom;
+  //   });
+
+  //   // ズームレベルを反映
+  //   mapController.animateCamera(CameraUpdate.zoomTo(_currentZoom));
+  // }
 
   void _loadToiletMarkers() async {
     try {
-      final toilets = await _toiletService.fetchToilets();
+      final toilets = await _toiletService.fetchToilets(
+        _currentPosition.latitude,
+        _currentPosition.longitude,
+      );
       setState(() {
         _toilets = toilets;
+
+        // 現在地との距離でソート
+        _toilets.sort((a, b) {
+          final distanceA = Geolocator.distanceBetween(
+            _currentPosition.latitude,
+            _currentPosition.longitude,
+            a.latitude,
+            a.longitude,
+          );
+          final distanceB = Geolocator.distanceBetween(
+            _currentPosition.latitude,
+            _currentPosition.longitude,
+            b.latitude,
+            b.longitude,
+          );
+          return distanceA.compareTo(distanceB); // 距離が近い順にソート
+        });
+
+        // マーカーを更新
         _updateMarkers();
       });
     } catch (e) {
@@ -86,6 +108,7 @@ class _MapScreenState extends State<MapScreen> {
 
   void _updateMarkers() {
     setState(() {
+      // ソート後にマーカーを再設定
       _markers = _toilets
           .map((toilet) => Marker(
                 markerId: MarkerId(toilet.id),
@@ -96,35 +119,18 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  void _searchAndMoveToToilet() {
-    final matchingToilet = _toilets.firstWhere(
-      (toilet) =>
-          toilet.name.toLowerCase().contains(_searchQuery.toLowerCase()),
-    );
-
-    mapController.animateCamera(
-      CameraUpdate.newLatLng(
-        LatLng(matchingToilet.latitude, matchingToilet.longitude),
-      ),
-    );
-
-    _drawRoute(
-      LatLng(matchingToilet.latitude, matchingToilet.longitude),
-    );
-    }
 
   void _onMapCreated(GoogleMapController controller) async {
     mapController = controller;
   }
 
-  _addMarker(LatLng position, String id, BitmapDescriptor descriptor) {
+  void _addMarker(LatLng position, String id, BitmapDescriptor descriptor) {
     MarkerId markerId = MarkerId(id);
-    Marker marker =
-        Marker(markerId: markerId, icon: descriptor, position: position);
+    Marker marker = Marker(markerId: markerId, icon: descriptor, position: position);
     markers[markerId] = marker;
   }
-  
-  _addPolyLine() {
+
+  void _addPolyLine() {
     PolylineId id = PolylineId("poly");
     Polyline polyline = Polyline(
         polylineId: id, color: Colors.red, points: polylineCoordinates);
@@ -132,24 +138,74 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {});
   }
 
-  _getPolyline() async {
+  Future<void> _getPolyline() async {
     PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
-      googleApiKey: googleAPiKey,
+      googleApiKey: Env.key,
       request: PolylineRequest(
         origin: PointLatLng(_originLatitude, _originLongitude),
         destination: PointLatLng(_destLatitude, _destLongitude),
         mode: TravelMode.driving,
-        wayPoints: [PolylineWayPoint(location: "Sabo, Yaba Lagos Nigeria")],
       ),
     );
     if (result.points.isNotEmpty) {
-      result.points.forEach((PointLatLng point) {
+      for (var point in result.points) {
         polylineCoordinates.add(LatLng(point.latitude, point.longitude));
-      });
+      }
     }
     _addPolyLine();
   }
-  
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: TextField(
+        decoration: InputDecoration(
+          hintText: "トイレ名を検索",
+          prefixIcon: const Icon(Icons.search),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0)),
+          filled: true,
+          fillColor: Colors.white,
+        ),
+        onChanged: (value) {
+          setState(() {
+            _searchQuery = value;
+          });
+
+          // 文字が空になった場合、全てのトイレを距離順で再表示
+          if (_searchQuery.isEmpty) {
+            _loadToiletMarkers(); // 検索結果がない場合、距離順でリストを更新
+          } else {
+            _searchAndMoveToToilet(); // 検索結果がある場合、絞り込んで表示
+          }
+        },
+      ),
+    );
+  }
+
+  void _searchAndMoveToToilet() {
+    // 検索バーの文字に基づいてフィルタリング
+    final filteredToilets = _toilets.where((toilet) {
+      return toilet.name.toLowerCase().contains(_searchQuery.toLowerCase());
+    }).toList();
+
+    if (filteredToilets.isNotEmpty) {
+      setState(() {
+        _toilets = filteredToilets; // 検索結果を表示用リストに反映
+      });
+
+      // 最初の一致するトイレの位置に移動
+      final matchingToilet = filteredToilets.first;
+      mapController.animateCamera(
+        CameraUpdate.newLatLng(
+          LatLng(matchingToilet.latitude, matchingToilet.longitude),
+        ),
+      );
+    } else {
+      print('No matching toilets found.');
+    }
+  }
+
+
   Future<void> _drawRoute(LatLng destination) async {
     final String apiKey = Env.key; // APIキーを設定
     final url = Uri.parse(
@@ -213,70 +269,129 @@ class _MapScreenState extends State<MapScreen> {
     return points;
   }
 
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: TextField(
-        decoration: InputDecoration(
-          hintText: "トイレ名を検索",
-          prefixIcon: const Icon(Icons.search),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0)),
-        ),
-        onSubmitted: (value) {
-          setState(() {
-            _searchQuery = value;
-            _searchAndMoveToToilet();
-          });
+  Widget _buildMap() {
+    return GoogleMap(
+      initialCameraPosition: CameraPosition(
+        target: _currentPosition,
+        zoom: 15.0,
+      ),
+      onMapCreated: _onMapCreated,
+      markers: _markers,
+      polylines: _polylines,
+      myLocationEnabled: true,
+    );
+  }
+
+  Widget _buildToiletCarousel() {
+    return SizedBox(
+      height: 150,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _toilets.length,
+        itemBuilder: (context, index) {
+          final toilet = _toilets[index];
+          return GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ToiletDetailScreen(toilet: toilet),
+                ),
+              );
+              // // トイレ位置に移動
+              // mapController.animateCamera(CameraUpdate.newLatLngZoom(
+              //   LatLng(toilet.latitude, toilet.longitude),
+              //   17.0,
+              // ));
+
+              // // ルートを表示
+              // _drawRoute(LatLng(toilet.latitude, toilet.longitude));
+
+              // // ハイライト表示
+              // setState(() {
+              //   _markers = _markers.map((marker) {
+              //     if (marker.markerId.value == toilet.id) {
+              //       return marker.copyWith(
+              //         iconParam: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+              //       );
+              //     }
+              //     return marker.copyWith(iconParam: BitmapDescriptor.defaultMarker);
+              //   }).toSet();
+              // });
+            },
+            child: Card(
+              margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              child: SizedBox(
+                width: 173,  // 横幅を固定
+                height: 173, // 高さを固定
+                child: Wrap(
+                  children: [
+                    // 画像部分
+                    SizedBox(
+                      width: 180,
+                      height: 100,
+                      child: Image.network(
+                        toilet.imageUrl ?? 'https://via.placeholder.com/100',
+                        width: 100,
+                        height: 100,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    // 名前を2行に表示
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        children: [
+                          Text(
+                            toilet.name.split(' ')[0], // 名前の1行目
+                            style: const TextStyle(
+                              fontSize: 12, 
+                              fontWeight: FontWeight.bold
+                            ),
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis, // 長い名前を省略
+                          ),
+                          Text(
+                            toilet.name.split(' ').skip(1).join(' '), // 名前の2行目
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold
+                            ),
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis, // 長い名前を省略
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
         },
       ),
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Shibuya Restroom Navigator"),
-      ),
       body: Stack(
         children: [
-          Column(
-            children: [
-              _buildSearchBar(),
-              Expanded(
-                child: GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: _currentPosition,
-                    zoom: 15.0,
-                  ),
-                  onMapCreated: _onMapCreated,
-                  markers: _markers,
-                  polylines: _polylines,
-                  myLocationEnabled: true,
-                ),
-              ),
-            ],
-          ),
-          Positioned(
-            bottom: 80,
-            right: 10,
+          _buildMap(),
+          SafeArea(
             child: Column(
               children: [
-                FloatingActionButton(
-                  heroTag: "zoom_in",
-                  onPressed: () => _updateZoomLevel(true), // ズームイン
-                  mini: true,
-                  child: const Icon(Icons.zoom_in),
-                ),
-                const SizedBox(height: 10),
-                FloatingActionButton(
-                  heroTag: "zoom_out",
-                  onPressed: () => _updateZoomLevel(false), // ズームアウト
-                  mini: true,
-                  child: const Icon(Icons.zoom_out),
-                ),
+                _buildSearchBar(),
               ],
             ),
+          ),
+          Positioned(
+            bottom: 0,  // 画面の下部に配置
+            left: 0,
+            right: 0,
+            child: _buildToiletCarousel(),  // トイレのカルーセルを下部に配置
           ),
         ],
       ),
@@ -285,21 +400,39 @@ class _MapScreenState extends State<MapScreen> {
 }
 
 class ToiletService {
-  Future<List<Toilet>> fetchToilets() async {
+  Future<List<Toilet>> fetchToilets(double latitude, double longitude) async {
     return [
       Toilet(
         id: "1",
-        name: "渋谷駅前公衆トイレ",
+        name: "はるのおがわコミュニティパークトイレ",
         type: "公衆トイレ",
-        latitude: 35.658033,
-        longitude: 139.701635,
+        latitude: 35.6722453,
+        longitude: 139.6910705,
+        imageUrl: "https://lh5.googleusercontent.com/p/AF1QipPbTeUG829YuGoILZVeNLEDXFt2aw9hUIoCvWff=w408-h306-k-no",
       ),
       Toilet(
         id: "2",
-        name: "商業施設トイレ A",
-        type: "商業施設",
-        latitude: 35.659564,
-        longitude: 139.700556,
+        name: "東三丁目公衆トイレ",
+        type: "公衆トイレ",
+        latitude: 35.6489531,
+        longitude: 139.7091569,
+        imageUrl: "https://tokyotoilet.jp/cms/wp-content/uploads/2020/08/HigashiToilet_07_A-2000x1318.jpg",
+      ),
+      Toilet(
+        id: "3",
+        name: "恵比寿公園トイレ",
+        type: "公衆トイレ",
+        latitude: 35.6435511,
+        longitude: 139.7087741,
+        imageUrl: "https://tokyotoilet.jp/cms/wp-content/uploads/2020/08/O0A3232-1-2000x1333.jpg",
+      ),
+      Toilet(
+        id: "4",
+        name: "鍋島松濤公園トイレ",
+        type: "公衆トイレ",
+        latitude: 35.6595319,
+        longitude: 139.6915548,
+        imageUrl: "https://tokyotoilet.jp/cms/wp-content/uploads/2021/07/O0A6933-2000x1333.jpg",
       ),
     ];
   }
@@ -311,6 +444,7 @@ class Toilet {
   final String type;
   final double latitude;
   final double longitude;
+  final String? imageUrl;
 
   Toilet({
     required this.id,
@@ -318,5 +452,6 @@ class Toilet {
     required this.type,
     required this.latitude,
     required this.longitude,
+    this.imageUrl,
   });
 }

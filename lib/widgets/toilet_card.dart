@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/toilet.dart';
+import 'package:flutter_application_shibuya/screens/map_screen.dart';
 
 class ToiletCard extends StatelessWidget {
   final Toilet toilet;
@@ -11,7 +11,7 @@ class ToiletCard extends StatelessWidget {
     return Card(
       child: ListTile(
         title: Text(toilet.name),
-        subtitle: Text('${toilet.type}'),
+        subtitle: Text(toilet.type),
         trailing: const Icon(Icons.arrow_forward),
         onTap: () {
           // 詳細画面に遷移

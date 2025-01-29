@@ -1,5 +1,5 @@
 import 'package:flutter_application_shibuya/screens/google_maps_api.dart';
-import '../models/toilet.dart';  // Toiletクラスをインポート
+import 'package:flutter_application_shibuya/screens/map_screen.dart';
 
 class ToiletService {
   // トイレ情報を取得
@@ -14,8 +14,8 @@ class ToiletService {
           latitude: toiletData['latitude'],
           longitude: toiletData['longitude'],
           type: toiletData['type'],
-          wheelchairAccessible: toiletData['wheelchairAccessible'],
-          ostomateFriendly: toiletData['ostomateFriendly'],
+          // wheelchairAccessible: toiletData['wheelchairAccessible'],
+          // ostomateFriendly: toiletData['ostomateFriendly'],
         );
       }).toList();
     } catch (e) {
