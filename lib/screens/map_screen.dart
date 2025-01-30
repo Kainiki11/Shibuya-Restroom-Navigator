@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_shibuya/env/env.dart';
-import 'package:flutter_application_shibuya/screens/toilet_detail_screen.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
@@ -138,6 +137,53 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {});
   }
 
+  void _showModal(BuildContext context, Toilet toilet) {
+    showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false, // ユーザーがモーダルを閉じないようにする
+      builder: (BuildContext context) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 画像を表示
+            if (toilet.imageUrl != null)
+              Center(
+                child: Image.network(
+                  toilet.imageUrl!,
+                  width: double.infinity,
+                  height: 200,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            const SizedBox(height: 16),
+            // トイレの名前
+            Text(
+              toilet.name,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            // トイレの種類
+            Text("種類: ${toilet.type}", style: const TextStyle(fontSize: 18)),
+            const SizedBox(height: 8),
+            // 位置情報
+            Text("緯度: ${toilet.latitude}, 経度: ${toilet.longitude}",
+                style: const TextStyle(fontSize: 16)),
+            const SizedBox(height: 16),
+            // Googleマップに戻るボタン
+            Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: const Text("マップに戻る"),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _getPolyline() async {
     PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
       googleApiKey: Env.key,
@@ -200,6 +246,7 @@ class _MapScreenState extends State<MapScreen> {
           LatLng(matchingToilet.latitude, matchingToilet.longitude),
         ),
       );
+      _drawRoute(LatLng(matchingToilet.latitude, matchingToilet.longitude));
     } else {
       print('No matching toilets found.');
     }
@@ -292,32 +339,28 @@ class _MapScreenState extends State<MapScreen> {
           final toilet = _toilets[index];
           return GestureDetector(
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ToiletDetailScreen(toilet: toilet),
-                ),
-              );
-              // // トイレ位置に移動
-              // mapController.animateCamera(CameraUpdate.newLatLngZoom(
-              //   LatLng(toilet.latitude, toilet.longitude),
-              //   17.0,
-              // ));
+              _showModal(context, toilet);
+              _drawRoute(LatLng(toilet.latitude, toilet.longitude));
+              // トイレ位置に移動
+              mapController.animateCamera(CameraUpdate.newLatLngZoom(
+                LatLng(toilet.latitude, toilet.longitude),
+                17.0,
+              ));
 
-              // // ルートを表示
-              // _drawRoute(LatLng(toilet.latitude, toilet.longitude));
+              // ルートを表示
+              _drawRoute(LatLng(toilet.latitude, toilet.longitude));
 
-              // // ハイライト表示
-              // setState(() {
-              //   _markers = _markers.map((marker) {
-              //     if (marker.markerId.value == toilet.id) {
-              //       return marker.copyWith(
-              //         iconParam: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-              //       );
-              //     }
-              //     return marker.copyWith(iconParam: BitmapDescriptor.defaultMarker);
-              //   }).toSet();
-              // });
+              // ハイライト表示
+              setState(() {
+                _markers = _markers.map((marker) {
+                  if (marker.markerId.value == toilet.id) {
+                    return marker.copyWith(
+                      iconParam: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+                    );
+                  }
+                  return marker.copyWith(iconParam: BitmapDescriptor.defaultMarker);
+                }).toSet();
+              });
             },
             child: Card(
               margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
@@ -373,6 +416,20 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Widget _buildCurrentLocationButton() {
+    return Positioned(
+      bottom: 80,
+      right: 16,
+      child: FloatingActionButton(
+        onPressed: () async {
+          _getCurrentLocation();
+          mapController.animateCamera(CameraUpdate.newLatLng(_currentPosition));
+        },
+        child: const Icon(Icons.my_location),
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -384,6 +441,7 @@ class _MapScreenState extends State<MapScreen> {
             child: Column(
               children: [
                 _buildSearchBar(),
+                _buildCurrentLocationButton(),
               ],
             ),
           ),
