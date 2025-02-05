@@ -140,49 +140,106 @@ class _MapScreenState extends State<MapScreen> {
   void _showModal(BuildContext context, Toilet toilet) {
     showModalBottomSheet<void>(
       context: context,
-      isDismissible: false, // ユーザーがモーダルを閉じないようにする
+      isScrollControlled: true, 
+      isDismissible: true, // 🔥 地図タップで閉じる
+      backgroundColor: Colors.transparent, // 🔥 背景を透明にする
       builder: (BuildContext context) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 画像を表示
-            if (toilet.imageUrl != null)
-              Center(
-                child: Image.network(
-                  toilet.imageUrl!,
-                  width: double.infinity,
-                  height: 200,
-                  fit: BoxFit.cover,
+        return DraggableScrollableSheet(
+          initialChildSize: 0.5, 
+          minChildSize: 0.3, 
+          maxChildSize: 1.0, 
+          expand: false, // ← これを false にすることで背景を透明にした時の影響を防ぐ
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.white, // 🔥 ここだけ白くする
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              padding: const EdgeInsets.all(16.0),
+              child: SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 5,
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[400],
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                    if (toilet.imageUrl != null)
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            toilet.imageUrl!,
+                            width: double.infinity,
+                            height: 200,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    Text(
+                      toilet.name,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text("種類: ${toilet.type}", style: const TextStyle(fontSize: 18)),
+                    const SizedBox(height: 8),
+                    Text("緯度: ${toilet.latitude}, 経度: ${toilet.longitude}",
+                        style: const TextStyle(fontSize: 16)),
+                    const SizedBox(height: 12),
+
+                    // 設備情報の表示
+                    if (toilet.hasMaleToilet) _facilityItem(Icons.male, "男性用トイレ"),
+                    if (toilet.hasFemaleToilet) _facilityItem(Icons.female, "女性用トイレ"),
+                    if (toilet.hasChildToilet) _facilityItem(Icons.child_care, "こども用トイレ"),
+                    if (toilet.hasAccessibleToilet) _facilityItem(Icons.accessible, "障害のある人用トイレ"),
+                    if (toilet.hasBabyChair) _facilityItem(Icons.chair, "ベビーチェア"),
+                    if (toilet.hasBabyCareRoom) _facilityItem(Icons.baby_changing_station, "ベビーケアルーム"),
+                    if (toilet.hasAssistanceBed) _facilityItem(Icons.single_bed, "介助用ベッド"),
+
+                    const SizedBox(height: 16),
+                    Center(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        child: const Text("マップに戻る"),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            const SizedBox(height: 16),
-            // トイレの名前
-            Text(
-              toilet.name,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            // トイレの種類
-            Text("種類: ${toilet.type}", style: const TextStyle(fontSize: 18)),
-            const SizedBox(height: 8),
-            // 位置情報
-            Text("緯度: ${toilet.latitude}, 経度: ${toilet.longitude}",
-                style: const TextStyle(fontSize: 16)),
-            const SizedBox(height: 16),
-            // Googleマップに戻るボタン
-            Center(
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                child: const Text("マップに戻る"),
-              ),
-            ),
-          ],
+            );
+          },
         );
       },
     );
   }
+
+
+  // 設備情報を表示するための共通ウィジェット
+  Widget _facilityItem(IconData icon, String label) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.blue),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(fontSize: 16)),
+        ],
+      ),
+    );
+  }
+
+
 
   Future<void> _getPolyline() async {
     PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
@@ -467,6 +524,11 @@ class ToiletService {
         latitude: 35.6722453,
         longitude: 139.6910705,
         imageUrl: "https://lh5.googleusercontent.com/p/AF1QipPbTeUG829YuGoILZVeNLEDXFt2aw9hUIoCvWff=w408-h306-k-no",
+        hasMaleToilet: true,
+        hasFemaleToilet: true,
+        hasChildToilet: true,
+
+
       ),
       Toilet(
         id: "2",
@@ -503,6 +565,15 @@ class Toilet {
   final double latitude;
   final double longitude;
   final String? imageUrl;
+  
+  // 設備情報
+  final bool hasMaleToilet;
+  final bool hasFemaleToilet;
+  final bool hasChildToilet;
+  final bool hasAccessibleToilet;
+  final bool hasBabyChair;
+  final bool hasBabyCareRoom;
+  final bool hasAssistanceBed;
 
   Toilet({
     required this.id,
@@ -511,5 +582,14 @@ class Toilet {
     required this.latitude,
     required this.longitude,
     this.imageUrl,
+    this.hasMaleToilet = false,
+    this.hasFemaleToilet = false,
+    this.hasChildToilet = false,
+    this.hasAccessibleToilet = false,
+    this.hasBabyChair = false,
+    this.hasBabyCareRoom = false,
+    this.hasAssistanceBed = false,
   });
 }
+
+
