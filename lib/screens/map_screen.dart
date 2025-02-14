@@ -6,7 +6,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
-
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
 
@@ -17,30 +16,34 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   late GoogleMapController mapController;
-  // ignore: prefer_final_fields
-  double _originLatitude = 6.5212402, _originLongitude = 3.3679965;
-  // ignore: prefer_final_fields
-  double _destLatitude = 6.849660, _destLongitude = 3.648190;
+
+  // 初期位置を定義（例: 渋谷周辺）
+  final _initialPosition = const LatLng(35.659108, 139.703728);
+  final _initialDestination = const LatLng(35.659108, 139.703728);
+
   Map<MarkerId, Marker> markers = {};
   Map<PolylineId, Polyline> polylines = {};
   List<LatLng> polylineCoordinates = [];
   PolylinePoints polylinePoints = PolylinePoints();
   String googleAPiKey = Env.key;
-  var _currentPosition = const LatLng(35.6595, 139.7006);
+
+  // 現在位置（初期位置としても利用）
+  var _currentPosition = const LatLng(35.659108, 139.703728);
+
   final ToiletService _toiletService = ToiletService();
   List<Toilet> _toilets = [];
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
   String _searchQuery = '';
-  // double _currentZoom = 15.0; // 初期ズームレベル
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
     _loadToiletMarkers();
-    _addMarker(LatLng(_originLatitude, _originLongitude), "origin", BitmapDescriptor.defaultMarker);
-    _addMarker(LatLng(_destLatitude, _destLongitude), "destination", BitmapDescriptor.defaultMarkerWithHue(90));
+    // 初期位置と目的地のマーカーを追加
+    _addMarker(_initialPosition, "origin", BitmapDescriptor.defaultMarker);
+    _addMarker(_initialDestination, "destination", BitmapDescriptor.defaultMarkerWithHue(90));
     _getPolyline();
   }
 
@@ -57,19 +60,6 @@ class _MapScreenState extends State<MapScreen> {
     // 現在地が取得できた後にトイレの情報を更新
     _loadToiletMarkers();
   }
-  // void _updateZoomLevel(bool zoomIn) {
-  //   final newZoom = zoomIn ? _currentZoom + 1 : _currentZoom - 1;
-
-  //   // ズームレベルが許容範囲内か確認
-  //   if (newZoom < 2 || newZoom > 20) return;
-
-  //   setState(() {
-  //     _currentZoom = newZoom;
-  //   });
-
-  //   // ズームレベルを反映
-  //   mapController.animateCamera(CameraUpdate.zoomTo(_currentZoom));
-  // }
 
   void _loadToiletMarkers() async {
     try {
@@ -94,7 +84,7 @@ class _MapScreenState extends State<MapScreen> {
             b.latitude,
             b.longitude,
           );
-          return distanceA.compareTo(distanceB); // 距離が近い順にソート
+          return distanceA.compareTo(distanceB);
         });
 
         // マーカーを更新
@@ -107,7 +97,6 @@ class _MapScreenState extends State<MapScreen> {
 
   void _updateMarkers() {
     setState(() {
-      // ソート後にマーカーを再設定
       _markers = _toilets
           .map((toilet) => Marker(
                 markerId: MarkerId(toilet.id),
@@ -118,9 +107,17 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-
   void _onMapCreated(GoogleMapController controller) async {
     mapController = controller;
+    // カメラを初期位置に移動
+    mapController.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: _initialPosition,
+          zoom: 15.0,
+        ),
+      ),
+    );
   }
 
   void _addMarker(LatLng position, String id, BitmapDescriptor descriptor) {
@@ -137,95 +134,7 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {});
   }
 
-  void _showModal(BuildContext context, Toilet toilet) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true, 
-      isDismissible: true, // 🔥 地図タップで閉じる
-      backgroundColor: Colors.transparent, // 🔥 背景を透明にする
-      builder: (BuildContext context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.5, 
-          minChildSize: 0.3, 
-          maxChildSize: 1.0, 
-          expand: false, // ← これを false にすることで背景を透明にした時の影響を防ぐ
-          builder: (context, scrollController) {
-            return Container(
-              decoration: BoxDecoration(
-                color: Colors.white, // 🔥 ここだけ白くする
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              padding: const EdgeInsets.all(16.0),
-              child: SingleChildScrollView(
-                controller: scrollController,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 5,
-                        margin: const EdgeInsets.only(bottom: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[400],
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                    if (toilet.imageUrl != null)
-                      Center(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            toilet.imageUrl!,
-                            width: double.infinity,
-                            height: 200,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    Text(
-                      toilet.name,
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text("種類: ${toilet.type}", style: const TextStyle(fontSize: 18)),
-                    const SizedBox(height: 8),
-                    Text("緯度: ${toilet.latitude}, 経度: ${toilet.longitude}",
-                        style: const TextStyle(fontSize: 16)),
-                    const SizedBox(height: 12),
-
-                    // 設備情報の表示
-                    if (toilet.hasMaleToilet) _facilityItem(Icons.male, "男性用トイレ"),
-                    if (toilet.hasFemaleToilet) _facilityItem(Icons.female, "女性用トイレ"),
-                    if (toilet.hasChildToilet) _facilityItem(Icons.child_care, "こども用トイレ"),
-                    if (toilet.hasAccessibleToilet) _facilityItem(Icons.accessible, "障害のある人用トイレ"),
-                    if (toilet.hasBabyChair) _facilityItem(Icons.chair, "ベビーチェア"),
-                    if (toilet.hasBabyCareRoom) _facilityItem(Icons.baby_changing_station, "ベビーケアルーム"),
-                    if (toilet.hasAssistanceBed) _facilityItem(Icons.single_bed, "介助用ベッド"),
-
-                    const SizedBox(height: 16),
-                    Center(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        child: const Text("マップに戻る"),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-
-  // 設備情報を表示するための共通ウィジェット
+ // 設備情報を表示するための共通ウィジェット
   Widget _facilityItem(IconData icon, String label) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -239,14 +148,12 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-
-
   Future<void> _getPolyline() async {
     PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
       googleApiKey: Env.key,
       request: PolylineRequest(
-        origin: PointLatLng(_originLatitude, _originLongitude),
-        destination: PointLatLng(_destLatitude, _destLongitude),
+        origin: PointLatLng(_initialPosition.latitude, _initialPosition.longitude),
+        destination: PointLatLng(_initialDestination.latitude, _initialDestination.longitude),
         mode: TravelMode.driving,
       ),
     );
@@ -274,11 +181,10 @@ class _MapScreenState extends State<MapScreen> {
             _searchQuery = value;
           });
 
-          // 文字が空になった場合、全てのトイレを距離順で再表示
           if (_searchQuery.isEmpty) {
-            _loadToiletMarkers(); // 検索結果がない場合、距離順でリストを更新
+            _loadToiletMarkers();
           } else {
-            _searchAndMoveToToilet(); // 検索結果がある場合、絞り込んで表示
+            _searchAndMoveToToilet();
           }
         },
       ),
@@ -286,17 +192,15 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _searchAndMoveToToilet() {
-    // 検索バーの文字に基づいてフィルタリング
     final filteredToilets = _toilets.where((toilet) {
       return toilet.name.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
 
     if (filteredToilets.isNotEmpty) {
       setState(() {
-        _toilets = filteredToilets; // 検索結果を表示用リストに反映
+        _toilets = filteredToilets;
       });
 
-      // 最初の一致するトイレの位置に移動
       final matchingToilet = filteredToilets.first;
       mapController.animateCamera(
         CameraUpdate.newLatLng(
@@ -309,9 +213,8 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-
   Future<void> _drawRoute(LatLng destination) async {
-    final String apiKey = Env.key; // APIキーを設定
+    final String apiKey = Env.key;
     final url = Uri.parse(
         'https://maps.googleapis.com/maps/api/directions/json?origin=${_currentPosition.latitude},${_currentPosition.longitude}&destination=${destination.latitude},${destination.longitude}&mode=walking&key=$apiKey');
 
@@ -376,7 +279,7 @@ class _MapScreenState extends State<MapScreen> {
   Widget _buildMap() {
     return GoogleMap(
       initialCameraPosition: CameraPosition(
-        target: _currentPosition,
+        target: _initialPosition,
         zoom: 15.0,
       ),
       onMapCreated: _onMapCreated,
@@ -398,16 +301,10 @@ class _MapScreenState extends State<MapScreen> {
             onTap: () {
               _showModal(context, toilet);
               _drawRoute(LatLng(toilet.latitude, toilet.longitude));
-              // トイレ位置に移動
               mapController.animateCamera(CameraUpdate.newLatLngZoom(
                 LatLng(toilet.latitude, toilet.longitude),
                 17.0,
               ));
-
-              // ルートを表示
-              _drawRoute(LatLng(toilet.latitude, toilet.longitude));
-
-              // ハイライト表示
               setState(() {
                 _markers = _markers.map((marker) {
                   if (marker.markerId.value == toilet.id) {
@@ -422,11 +319,10 @@ class _MapScreenState extends State<MapScreen> {
             child: Card(
               margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
               child: SizedBox(
-                width: 173,  // 横幅を固定
-                height: 173, // 高さを固定
+                width: 173,
+                height: 173,
                 child: Wrap(
                   children: [
-                    // 画像部分
                     SizedBox(
                       width: 180,
                       height: 100,
@@ -437,28 +333,21 @@ class _MapScreenState extends State<MapScreen> {
                         fit: BoxFit.cover,
                       ),
                     ),
-                    // 名前を2行に表示
                     Padding(
                       padding: const EdgeInsets.all(8.0),
                       child: Column(
                         children: [
                           Text(
-                            toilet.name.split(' ')[0], // 名前の1行目
-                            style: const TextStyle(
-                              fontSize: 12, 
-                              fontWeight: FontWeight.bold
-                            ),
+                            toilet.name.split(' ')[0],
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                             textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis, // 長い名前を省略
+                            overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            toilet.name.split(' ').skip(1).join(' '), // 名前の2行目
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold
-                            ),
+                            toilet.name.split(' ').skip(1).join(' '),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                             textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis, // 長い名前を省略
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
@@ -487,7 +376,6 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -498,18 +386,105 @@ class _MapScreenState extends State<MapScreen> {
             child: Column(
               children: [
                 _buildSearchBar(),
-                _buildCurrentLocationButton(),
               ],
             ),
           ),
+                _buildCurrentLocationButton(),
           Positioned(
-            bottom: 0,  // 画面の下部に配置
+            bottom: 0,
             left: 0,
             right: 0,
-            child: _buildToiletCarousel(),  // トイレのカルーセルを下部に配置
+            child: _buildToiletCarousel(),
           ),
         ],
       ),
+    );
+  }
+
+  void _showModal(BuildContext context, Toilet toilet) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true, 
+      isDismissible: true, // 🔥 地図タップで閉じる
+      backgroundColor: Colors.transparent, // 🔥 背景を透明にする
+      builder: (BuildContext context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.5, 
+          minChildSize: 0.3, 
+          maxChildSize: 1.0, 
+          expand: false, // ← これを false にすることで背景を透明にした時の影響を防ぐ
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.white, // 🔥 ここだけ白くする
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              padding: const EdgeInsets.all(16.0),
+              child: SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 5,
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[400],
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                    if (toilet.imageUrl != null)
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            toilet.imageUrl!,
+                            width: double.infinity,
+                            height: 200,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    Text(
+                      toilet.name,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text("${toilet.type}", style: const TextStyle(fontSize: 18)),
+                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
+
+                    // 設備情報の表示
+                    if (toilet.hasMaleToilet) _facilityItem(Icons.male, "男性用トイレ"),
+                    if (toilet.hasFemaleToilet) _facilityItem(Icons.female, "女性用トイレ"),
+                    if (toilet.hasChildToilet) _facilityItem(Icons.child_care, "こども用トイレ"),
+                    if (toilet.hasAccessibleToilet) _facilityItem(Icons.accessible, "障害のある人用トイレ"),
+                    if (toilet.hasBabyChair) _facilityItem(Icons.chair, "ベビーチェア"),
+                    if (toilet.hasBabyCareRoom) _facilityItem(Icons.baby_changing_station, "ベビーケアルーム"),
+                    if (toilet.hasAssistanceBed) _facilityItem(Icons.single_bed, "介助用ベッド"),
+                    if (toilet.hasOstomateToilet) _facilityItem(Icons.medical_services, "オストメイト対応トイレ"),
+
+
+                    const SizedBox(height: 16),
+                    Center(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        child: const Text("マップに戻る"),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -526,9 +501,12 @@ class ToiletService {
         imageUrl: "https://lh5.googleusercontent.com/p/AF1QipPbTeUG829YuGoILZVeNLEDXFt2aw9hUIoCvWff=w408-h306-k-no",
         hasMaleToilet: true,
         hasFemaleToilet: true,
-        hasChildToilet: true,
-
-
+        hasChildToilet: false,
+        hasAccessibleToilet: true,
+        hasBabyChair: true,
+        hasBabyCareRoom: false,
+        hasAssistanceBed: false,
+        hasOstomateToilet: true,
       ),
       Toilet(
         id: "2",
@@ -537,6 +515,14 @@ class ToiletService {
         latitude: 35.6489531,
         longitude: 139.7091569,
         imageUrl: "https://tokyotoilet.jp/cms/wp-content/uploads/2020/08/HigashiToilet_07_A-2000x1318.jpg",
+        hasMaleToilet: true,
+        hasFemaleToilet: true,
+        hasChildToilet: false,
+        hasAccessibleToilet: true,
+        hasBabyChair: false,
+        hasBabyCareRoom: false,
+        hasAssistanceBed: false,
+        hasOstomateToilet: true,
       ),
       Toilet(
         id: "3",
@@ -545,6 +531,14 @@ class ToiletService {
         latitude: 35.6435511,
         longitude: 139.7087741,
         imageUrl: "https://tokyotoilet.jp/cms/wp-content/uploads/2020/08/O0A3232-1-2000x1333.jpg",
+        hasMaleToilet: true,
+        hasFemaleToilet: true,
+        hasChildToilet: false,
+        hasAccessibleToilet: true,
+        hasBabyChair: true,
+        hasBabyCareRoom: false,
+        hasAssistanceBed: false,
+        hasOstomateToilet: true,
       ),
       Toilet(
         id: "4",
@@ -553,6 +547,30 @@ class ToiletService {
         latitude: 35.6595319,
         longitude: 139.6915548,
         imageUrl: "https://tokyotoilet.jp/cms/wp-content/uploads/2021/07/O0A6933-2000x1333.jpg",
+        hasMaleToilet: true,
+        hasFemaleToilet: true,
+        hasChildToilet: true,
+        hasAccessibleToilet: true,
+        hasBabyChair: true,
+        hasBabyCareRoom: true,
+        hasAssistanceBed: false,
+        hasOstomateToilet: true,
+      ),
+      Toilet(
+        id: "5",
+        name: "笹塚緑道公衆トイレ",
+        type: "公衆トイレ",
+        latitude: 35.6733752,
+        longitude: 139.6673582,
+        imageUrl: "https://tokyotoilet.jp/cms/wp-content/uploads/2023/05/1G1A0857-640x427.jpg",
+        hasMaleToilet: true,
+        hasFemaleToilet: true,
+        hasChildToilet: true,
+        hasAccessibleToilet: true,
+        hasBabyChair: true,
+        hasBabyCareRoom: true,
+        hasAssistanceBed: true,
+        hasOstomateToilet: true,
       ),
     ];
   }
@@ -565,8 +583,6 @@ class Toilet {
   final double latitude;
   final double longitude;
   final String? imageUrl;
-  
-  // 設備情報
   final bool hasMaleToilet;
   final bool hasFemaleToilet;
   final bool hasChildToilet;
@@ -574,6 +590,7 @@ class Toilet {
   final bool hasBabyChair;
   final bool hasBabyCareRoom;
   final bool hasAssistanceBed;
+  final bool hasOstomateToilet;
 
   Toilet({
     required this.id,
@@ -589,7 +606,6 @@ class Toilet {
     this.hasBabyChair = false,
     this.hasBabyCareRoom = false,
     this.hasAssistanceBed = false,
+    this.hasOstomateToilet = false,
   });
 }
-
-
