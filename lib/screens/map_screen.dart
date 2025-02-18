@@ -1,23 +1,24 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_application_shibuya/env/env.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:test_project/env/env.dart';
+import 'package:test_project/screens/language/global_language.dart';
+import 'package:translator/translator.dart';
+
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
   _MapScreenState createState() => _MapScreenState();
 }
 
 class _MapScreenState extends State<MapScreen> {
   late GoogleMapController mapController;
 
-  // 初期位置を定義（例: 渋谷周辺）
   final _initialPosition = const LatLng(35.659108, 139.703728);
   final _initialDestination = const LatLng(35.659108, 139.703728);
 
@@ -27,7 +28,6 @@ class _MapScreenState extends State<MapScreen> {
   PolylinePoints polylinePoints = PolylinePoints();
   String googleAPiKey = Env.key;
 
-  // 現在位置（初期位置としても利用）
   var _currentPosition = const LatLng(35.659108, 139.703728);
 
   final ToiletService _toiletService = ToiletService();
@@ -41,23 +41,19 @@ class _MapScreenState extends State<MapScreen> {
     super.initState();
     _getCurrentLocation();
     _loadToiletMarkers();
-    // 初期位置と目的地のマーカーを追加
     _addMarker(_initialPosition, "origin", BitmapDescriptor.defaultMarker);
     _addMarker(_initialDestination, "destination", BitmapDescriptor.defaultMarkerWithHue(90));
     _getPolyline();
   }
 
   void _getCurrentLocation() async {
-    // 現在地の取得
     Position position = await Geolocator.getCurrentPosition(
-      // ignore: deprecated_member_use
       desiredAccuracy: LocationAccuracy.high,
     );
     setState(() {
       _currentPosition = LatLng(position.latitude, position.longitude);
     });
 
-    // 現在地が取得できた後にトイレの情報を更新
     _loadToiletMarkers();
   }
 
@@ -70,7 +66,6 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _toilets = toilets;
 
-        // 現在地との距離でソート
         _toilets.sort((a, b) {
           final distanceA = Geolocator.distanceBetween(
             _currentPosition.latitude,
@@ -87,7 +82,6 @@ class _MapScreenState extends State<MapScreen> {
           return distanceA.compareTo(distanceB);
         });
 
-        // マーカーを更新
         _updateMarkers();
       });
     } catch (e) {
@@ -109,7 +103,6 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onMapCreated(GoogleMapController controller) async {
     mapController = controller;
-    // カメラを初期位置に移動
     mapController.animateCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
@@ -134,7 +127,6 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {});
   }
 
- // 設備情報を表示するための共通ウィジェット
   Widget _facilityItem(IconData icon, String label) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -170,7 +162,9 @@ class _MapScreenState extends State<MapScreen> {
       padding: const EdgeInsets.all(8.0),
       child: TextField(
         decoration: InputDecoration(
-          hintText: "トイレ名を検索",
+          hintText: selectedLanguage == Language.English
+            ? "Search for toilet by name"
+            : "トイレの名前で検索", // 言語に応じたヒントテキスト
           prefixIcon: const Icon(Icons.search),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0)),
           filled: true,
@@ -286,12 +280,13 @@ class _MapScreenState extends State<MapScreen> {
       markers: _markers,
       polylines: _polylines,
       myLocationEnabled: true,
+      myLocationButtonEnabled: false,
     );
   }
 
   Widget _buildToiletCarousel() {
     return SizedBox(
-      height: 150,
+      height: 165,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: _toilets.length,
@@ -327,7 +322,7 @@ class _MapScreenState extends State<MapScreen> {
                       width: 180,
                       height: 100,
                       child: Image.network(
-                        toilet.imageUrl ?? 'https://via.placeholder.com/100',
+                        toilet.imageUrl,
                         width: 100,
                         height: 100,
                         fit: BoxFit.cover,
@@ -337,17 +332,14 @@ class _MapScreenState extends State<MapScreen> {
                       padding: const EdgeInsets.all(8.0),
                       child: Column(
                         children: [
-                          Text(
-                            toilet.name.split(' ')[0],
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            toilet.name.split(' ').skip(1).join(' '),
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
+                          Flexible( // ここに追加
+                            child: Text(
+                              toilet.name,
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 2, // トイレ名が2行まで表示
+                            ),
                           ),
                         ],
                       ),
@@ -364,7 +356,7 @@ class _MapScreenState extends State<MapScreen> {
 
   Widget _buildCurrentLocationButton() {
     return Positioned(
-      bottom: 80,
+      bottom: 165,
       right: 16,
       child: FloatingActionButton(
         onPressed: () async {
@@ -436,18 +428,17 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ),
                     ),
-                    if (toilet.imageUrl != null)
-                      Center(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            toilet.imageUrl!,
-                            width: double.infinity,
-                            height: 200,
-                            fit: BoxFit.cover,
-                          ),
+                    Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          toilet.imageUrl,
+                          width: double.infinity,
+                          height: 200,
+                          fit: BoxFit.cover,
                         ),
                       ),
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       toilet.name,
@@ -458,15 +449,15 @@ class _MapScreenState extends State<MapScreen> {
                     const SizedBox(height: 8),
                     const SizedBox(height: 12),
 
-                    // 設備情報の表示
-                    if (toilet.hasMaleToilet) _facilityItem(Icons.male, "男性用トイレ"),
-                    if (toilet.hasFemaleToilet) _facilityItem(Icons.female, "女性用トイレ"),
-                    if (toilet.hasChildToilet) _facilityItem(Icons.child_care, "こども用トイレ"),
-                    if (toilet.hasAccessibleToilet) _facilityItem(Icons.accessible, "障害のある人用トイレ"),
-                    if (toilet.hasBabyChair) _facilityItem(Icons.chair, "ベビーチェア"),
-                    if (toilet.hasBabyCareRoom) _facilityItem(Icons.baby_changing_station, "ベビーケアルーム"),
-                    if (toilet.hasAssistanceBed) _facilityItem(Icons.single_bed, "介助用ベッド"),
-                    if (toilet.hasOstomateToilet) _facilityItem(Icons.medical_services, "オストメイト対応トイレ"),
+                    if (toilet.facilities.containsKey('male')) _facilityItem(Icons.male, toilet.facilities['male']!),
+                    if (toilet.facilities.containsKey('female')) _facilityItem(Icons.female, toilet.facilities['female']!),
+                    if (toilet.facilities.containsKey('child')) _facilityItem(Icons.child_care, toilet.facilities['child']!),
+                    if (toilet.facilities.containsKey('accessible')) _facilityItem(Icons.accessible, toilet.facilities['accessible']!),
+                    if (toilet.facilities.containsKey('babyChair')) _facilityItem(Icons.chair, toilet.facilities['babyChair']!),
+                    if (toilet.facilities.containsKey('babyCareRoom')) _facilityItem(Icons.baby_changing_station, toilet.facilities['babyCareRoom']!),
+                    if (toilet.facilities.containsKey('assistanceBed')) _facilityItem(Icons.single_bed, toilet.facilities['assistanceBed']!),
+                    if (toilet.facilities.containsKey('ostomate')) _facilityItem(Icons.medical_services, toilet.facilities['ostomate']!),
+
 
 
                     const SizedBox(height: 16),
@@ -475,7 +466,9 @@ class _MapScreenState extends State<MapScreen> {
                         onPressed: () {
                           Navigator.pop(context);
                         },
-                        child: const Text("マップに戻る"),
+                        child: Text(
+                          selectedLanguage == Language.English ? "Back to Map" : "マップに戻る", // 言語に応じてテキストを変更
+                        ),
                       ),
                     ),
                   ],
@@ -490,8 +483,10 @@ class _MapScreenState extends State<MapScreen> {
 }
 
 class ToiletService {
+  final GoogleTranslator translator = GoogleTranslator();
+
   Future<List<Toilet>> fetchToilets(double latitude, double longitude) async {
-    return [
+    List<Toilet> toilets = [
       Toilet(
         id: "1",
         name: "はるのおがわコミュニティパークトイレ",
@@ -572,25 +567,109 @@ class ToiletService {
         hasAssistanceBed: true,
         hasOstomateToilet: true,
       ),
+      // 他のトイレも同様に続く
     ];
+
+    // 言語に応じて設備情報を設定
+    for (var toilet in toilets) {
+      if (selectedLanguage == Language.English) {
+        // 英語の場合は翻訳を行う
+        toilet.name = (await translator.translate(toilet.name, to: 'en')).text;
+        toilet.type = (await translator.translate(toilet.type, to: 'en')).text;
+        toilet.facilities = await _translateFacilities(toilet);
+      } else {
+        // 日本語の場合は直接設定
+        toilet.facilities = _setJapaneseFacilities(toilet);
+      }
+    }
+
+    return toilets;
+  }
+
+  // 日本語の設備情報を設定
+  Map<String, String> _setJapaneseFacilities(Toilet toilet) {
+    final Map<String, String> facilities = {};
+
+    if (toilet.hasMaleToilet) {
+      facilities['male'] = '男性用トイレ';
+    }
+    if (toilet.hasFemaleToilet) {
+      facilities['female'] = '女性用トイレ';
+    }
+    if (toilet.hasChildToilet) {
+      facilities['child'] = 'こども用トイレ';
+    }
+    if (toilet.hasAccessibleToilet) {
+      facilities['accessible'] = '多目的トイレ';
+    }
+    if (toilet.hasBabyChair) {
+      facilities['babyChair'] = 'ベビーチェア';
+    }
+    if (toilet.hasBabyCareRoom) {
+      facilities['babyCareRoom'] = 'ベビーケアルーム';
+    }
+    if (toilet.hasAssistanceBed) {
+      facilities['assistanceBed'] = '介助用ベッド';
+    }
+    if (toilet.hasOstomateToilet) {
+      facilities['ostomate'] = 'オストメイト対応トイレ';
+    }
+
+    return facilities;
+  }
+
+  // 英語への翻訳（既存のメソッド）
+  Future<Map<String, String>> _translateFacilities(Toilet toilet) async {
+    final Map<String, String> translatedFacilities = {};
+
+    if (toilet.hasMaleToilet) {
+      translatedFacilities['male'] = (await translator.translate('男性用トイレ', to: 'en')).text;
+    }
+    if (toilet.hasFemaleToilet) {
+      translatedFacilities['female'] = (await translator.translate('女性用トイレ', to: 'en')).text;
+    }
+    if (toilet.hasChildToilet) {
+      translatedFacilities['child'] = (await translator.translate('こども用トイレ', to: 'en')).text;
+    }
+    if (toilet.hasAccessibleToilet) {
+      translatedFacilities['accessible'] = (await translator.translate('多目的トイレ', to: 'en')).text;
+    }
+    if (toilet.hasBabyChair) {
+      translatedFacilities['babyChair'] = (await translator.translate('ベビーチェア', to: 'en')).text;
+    }
+    if (toilet.hasBabyCareRoom) {
+      translatedFacilities['babyCareRoom'] = (await translator.translate('ベビーケアルーム', to: 'en')).text;
+    }
+    if (toilet.hasAssistanceBed) {
+      translatedFacilities['assistanceBed'] = (await translator.translate('介助用ベッド', to: 'en')).text;
+    }
+    if (toilet.hasOstomateToilet) {
+      translatedFacilities['ostomate'] = (await translator.translate('オストメイト対応トイレ', to: 'en')).text;
+    }
+
+    return translatedFacilities;
   }
 }
 
+
 class Toilet {
-  final String id;
-  final String name;
-  final String type;
-  final double latitude;
-  final double longitude;
-  final String? imageUrl;
-  final bool hasMaleToilet;
-  final bool hasFemaleToilet;
-  final bool hasChildToilet;
-  final bool hasAccessibleToilet;
-  final bool hasBabyChair;
-  final bool hasBabyCareRoom;
-  final bool hasAssistanceBed;
-  final bool hasOstomateToilet;
+  String id;
+  String name;
+  String type;
+  double latitude;
+  double longitude;
+  String imageUrl;
+  bool hasMaleToilet;
+  bool hasFemaleToilet;
+  bool hasChildToilet;
+  bool hasAccessibleToilet;
+  bool hasBabyChair;
+  bool hasBabyCareRoom;
+  bool hasAssistanceBed;
+  bool hasOstomateToilet;
+  
+  // 設備翻訳用のマップ
+  Map<String, String> facilities = {};
 
   Toilet({
     required this.id,
@@ -598,14 +677,14 @@ class Toilet {
     required this.type,
     required this.latitude,
     required this.longitude,
-    this.imageUrl,
-    this.hasMaleToilet = false,
-    this.hasFemaleToilet = false,
-    this.hasChildToilet = false,
-    this.hasAccessibleToilet = false,
-    this.hasBabyChair = false,
-    this.hasBabyCareRoom = false,
-    this.hasAssistanceBed = false,
-    this.hasOstomateToilet = false,
+    required this.imageUrl,
+    required this.hasMaleToilet,
+    required this.hasFemaleToilet,
+    required this.hasChildToilet,
+    required this.hasAccessibleToilet,
+    required this.hasBabyChair,
+    required this.hasBabyCareRoom,
+    required this.hasAssistanceBed,
+    required this.hasOstomateToilet,
   });
 }

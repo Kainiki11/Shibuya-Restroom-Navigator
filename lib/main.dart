@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_application_shibuya/env/env.dart';
+import 'package:flutter/services.dart'; 
 import 'package:firebase_core/firebase_core.dart'; // Firebase Core パッケージをインポート
-import 'screens/map_screen.dart';
+import 'package:test_project/env/env.dart';
+import 'package:test_project/screens/settings_screen.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -32,7 +32,7 @@ class ShibuyaToiletApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const MapScreen(), // MapScreenを初期画面に設定
+      home: const SettingsScreen(), // MapScreenを初期画面に設定
     );
   }
 }

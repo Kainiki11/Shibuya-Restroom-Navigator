@@ -1,5 +1,5 @@
-import 'package:flutter_application_shibuya/screens/google_maps_api.dart';
-import 'package:flutter_application_shibuya/screens/map_screen.dart';
+import 'package:test_project/screens/google_maps_api.dart';
+import 'package:test_project/screens/map_screen.dart';
 
 class ToiletService {
   // トイレ情報を取得
@@ -14,9 +14,17 @@ class ToiletService {
           latitude: toiletData['latitude'],
           longitude: toiletData['longitude'],
           type: toiletData['type'],
-          // wheelchairAccessible: toiletData['wheelchairAccessible'],
-          // ostomateFriendly: toiletData['ostomateFriendly'],
+          imageUrl: toiletData['imageUrl'],
+          hasMaleToilet: toiletData['hasMaleToilet'],
+          hasFemaleToilet: toiletData['hasFemaleToilet'],
+          hasChildToilet: toiletData['hasChildToilet'],
+          hasAccessibleToilet: toiletData['hasAccessibleToilet'],
+          hasBabyChair: toiletData['hasBabyChair'],
+          hasBabyCareRoom: toiletData['hasBabyCareRoom'],
+          hasAssistanceBed: toiletData['hasAssistanceBed'],
+          hasOstomateToilet: toiletData['hasOstomateToilet'],
         );
+
       }).toList();
     } catch (e) {
       print('Error fetching toilets: $e');

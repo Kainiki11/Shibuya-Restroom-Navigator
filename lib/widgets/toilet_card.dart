@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_shibuya/screens/map_screen.dart';
+import 'package:test_project/screens/map_screen.dart';
 
 class ToiletCard extends StatelessWidget {
   final Toilet toilet;
